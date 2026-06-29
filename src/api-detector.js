@@ -1,5 +1,5 @@
 import { BROWSER_USER_AGENT, DEFAULT_API_OPTIONS } from "./config.js";
-import { extractDouyinWorkInfo } from "./url-utils.js";
+import { extractDouyinWorkInfo, isDouyinShortUrl } from "./url-utils.js";
 import { buildProfileCandidates, buildProfileRequestHeaders, sanitizeProfileMessage, sanitizeProfileUrl } from "./api-profile-cache.js";
 
 const RISK_API_KEYWORDS = [
@@ -41,11 +41,43 @@ export function createApiDetector(options = {}) {
   return {
     async detect(url) {
       const startedAt = new Date();
-      const info = extractDouyinWorkInfo(url);
+      let pageUrl = url;
+      const shortUrl = isDouyinShortUrl(url);
+
+      if (shortUrl) {
+        if (typeof fetchImpl !== "function") {
+          return buildFallbackEvidence({
+            url,
+            startedAt,
+            errorType: "fetch_unavailable",
+            error: "当前 Node.js 环境不支持 fetch，请注入 fetchImpl。"
+          });
+        }
+
+        const resolved = await resolveShortUrl({
+          url,
+          fetchImpl,
+          cookieHeader: config.cookieHeader || "",
+          timeoutMs: config.timeoutMs
+        });
+        if (!resolved.ok) {
+          return buildFallbackEvidence({
+            url,
+            finalUrl: resolved.finalUrl || url,
+            startedAt,
+            errorType: resolved.errorType,
+            error: resolved.error
+          });
+        }
+        pageUrl = resolved.finalUrl;
+      }
+
+      const info = extractDouyinWorkInfo(pageUrl);
 
       if (!info.supported) {
         return buildFallbackEvidence({
           url,
+          finalUrl: pageUrl,
           startedAt,
           errorType: "unsupported_url",
           error: "不属于支持的抖音作品链接。"
@@ -72,13 +104,13 @@ export function createApiDetector(options = {}) {
         const safeApiUrl = sanitizeProfileUrl(apiUrl);
         const requestHeaders = item.source === "profile"
           ? buildProfileRequestHeaders(item.profile, {
-            pageUrl: url,
+            pageUrl,
             fallbackCookieHeader: config.cookieHeader || ""
           })
           : null;
         const responseEvidence = await requestDetailApi({
           apiUrl,
-          pageUrl: url,
+          pageUrl,
           fetchImpl,
           cookieHeader: config.cookieHeader || "",
           requestHeaders,
@@ -99,7 +131,7 @@ export function createApiDetector(options = {}) {
           return {
             stage: "api",
             originalUrl: url,
-            finalUrl: url,
+            finalUrl: pageUrl,
             apiUrl: safeApiUrl,
             detailJson: responseEvidence.detailJson,
             needsFallback: true,
@@ -117,7 +149,7 @@ export function createApiDetector(options = {}) {
         return {
           stage: "api",
           originalUrl: url,
-          finalUrl: url,
+          finalUrl: pageUrl,
           apiUrl: safeApiUrl,
           detailJson: responseEvidence.detailJson,
           needsFallback: false,
@@ -205,6 +237,74 @@ function collectRiskMessages(value, options = {}) {
   return messages;
 }
 
+async function resolveShortUrl({ url, fetchImpl, cookieHeader, timeoutMs }) {
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = controller && Number.isFinite(timeoutMs)
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+  const headers = {
+    "user-agent": BROWSER_USER_AGENT,
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "cookie": cookieHeader
+  };
+
+  try {
+    let currentUrl = url;
+    for (let index = 0; index < 5; index += 1) {
+      const response = await fetchImpl(currentUrl, {
+        method: "GET",
+        headers,
+        redirect: "manual",
+        signal: controller?.signal
+      });
+      const location = getHeaderValue(response.headers, "location");
+
+      if (response.status >= 300 && response.status < 400 && location) {
+        currentUrl = new URL(location, currentUrl).toString();
+        if (!isDouyinShortUrl(currentUrl)) {
+          return {
+            ok: true,
+            finalUrl: currentUrl
+          };
+        }
+        continue;
+      }
+
+      if (response.url && response.url !== currentUrl) {
+        return {
+          ok: true,
+          finalUrl: response.url
+        };
+      }
+
+      return {
+        ok: false,
+        finalUrl: currentUrl,
+        errorType: "unsupported_url",
+        error: "短链未返回可解析的作品落地链接。"
+      };
+    }
+
+    return {
+      ok: false,
+      finalUrl: currentUrl,
+      errorType: "unsupported_url",
+      error: "短链跳转次数过多，未解析到作品落地链接。"
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      finalUrl: url,
+      errorType: error?.name === "AbortError" ? "timeout" : "request_error",
+      error: sanitizeErrorMessage(error, cookieHeader)
+    };
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 async function requestDetailApi({ apiUrl, pageUrl, fetchImpl, cookieHeader, requestHeaders, timeoutMs }) {
   const controller = typeof AbortController === "function" ? new AbortController() : null;
   const timer = controller && Number.isFinite(timeoutMs)
@@ -260,8 +360,19 @@ async function requestDetailApi({ apiUrl, pageUrl, fetchImpl, cookieHeader, requ
   }
 }
 
+function getHeaderValue(headers, name) {
+  if (!headers) {
+    return "";
+  }
+  if (typeof headers.get === "function") {
+    return headers.get(name) || "";
+  }
+  return headers[name] || headers[name.toLowerCase()] || "";
+}
+
 function buildFallbackEvidence({
   url,
+  finalUrl = url,
   startedAt,
   apiUrl = "",
   detailJson = null,
@@ -275,7 +386,7 @@ function buildFallbackEvidence({
   return {
     stage: "api",
     originalUrl: url,
-    finalUrl: url,
+    finalUrl,
     apiUrl,
     detailJson,
     needsFallback: true,

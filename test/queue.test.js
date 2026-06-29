@@ -60,6 +60,73 @@ test("API 待确认、异常和风控疑似结果进入 Playwright 兜底", asyn
   assert.deepEqual(results.map((result) => result.stage), ["fallback", "fallback", "fallback"]);
 });
 
+test("禁用兜底时 API 待确认、异常和风控结果保留 API 阶段结果", async () => {
+  const fallbackRows = [];
+  const apiResults = new Map([
+    [2, { status: "待确认", errorType: "", needsFallback: true }],
+    [3, { status: "待确认", errorType: "request_error", needsFallback: false }],
+    [4, { status: "待确认", errorType: "risk_control", riskSuspected: true, needsFallback: false }]
+  ]);
+  const queue = createTwoStageQueue({
+    apiConcurrency: 1,
+    fallbackConcurrency: 1,
+    enableFallback: false,
+    apiDetect: async (row) => ({
+      rowNumber: row.rowNumber,
+      basis: "detail_api",
+      ...apiResults.get(row.rowNumber)
+    }),
+    fallbackDetect: async (row) => {
+      fallbackRows.push(row.rowNumber);
+      return {
+        rowNumber: row.rowNumber,
+        status: "失效",
+        basis: "dom_text",
+        stage: "fallback"
+      };
+    }
+  });
+
+  const results = await queue.run([
+    { rowNumber: 2, url: "https://www.douyin.com/note/404" },
+    { rowNumber: 3, url: "https://www.douyin.com/video/error" },
+    { rowNumber: 4, url: "https://www.douyin.com/video/risk" }
+  ]);
+
+  assert.deepEqual(fallbackRows, []);
+  assert.deepEqual(results.map((result) => result.status), ["待确认", "待确认", "待确认"]);
+  assert.deepEqual(results.map((result) => result.stage), ["api", "api", "api"]);
+  assert.deepEqual(results.map((result) => result.basis), ["detail_api", "detail_api", "detail_api"]);
+});
+
+test("禁用兜底时 API 检测抛错保留 API 异常结果", async () => {
+  const fallbackRows = [];
+  const queue = createTwoStageQueue({
+    enableFallback: false,
+    apiDetect: async () => {
+      throw new Error("API 检测异常");
+    },
+    fallbackDetect: async (row) => {
+      fallbackRows.push(row.rowNumber);
+      return {
+        rowNumber: row.rowNumber,
+        status: "失效",
+        basis: "dom_text",
+        stage: "fallback"
+      };
+    }
+  });
+
+  const results = await queue.run([{ rowNumber: 2, url: "https://www.douyin.com/video/error" }]);
+
+  assert.deepEqual(fallbackRows, []);
+  assert.equal(results[0].status, "待确认");
+  assert.equal(results[0].stage, "api");
+  assert.equal(results[0].basis, "detail_api");
+  assert.equal(results[0].errorType, "api_exception");
+  assert.match(results[0].remark, /API 检测异常/);
+});
+
 test("默认并发来自配置且测试可注入覆盖", async () => {
   const queue = createTwoStageQueue({
     apiDetect: async (row) => ({

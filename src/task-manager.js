@@ -139,6 +139,7 @@ function createInjectedRunQueue(options = {}) {
     const queue = createTwoStageQueue({
       apiConcurrency: taskOptions.apiConcurrency,
       fallbackConcurrency: taskOptions.fallbackConcurrency,
+      enableFallback: taskOptions.enableFallback,
       signal,
       apiDetect: async (row) => classifyDetectorEvidence(
         row,

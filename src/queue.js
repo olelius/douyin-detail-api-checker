@@ -22,7 +22,8 @@ export function createTwoStageQueue(options = {}) {
 
   const queueOptions = {
     apiConcurrency: normalizeConcurrency(options.apiConcurrency, DEFAULT_API_OPTIONS.concurrency),
-    fallbackConcurrency: normalizeConcurrency(options.fallbackConcurrency, DEFAULT_FALLBACK_OPTIONS.concurrency)
+    fallbackConcurrency: normalizeConcurrency(options.fallbackConcurrency, DEFAULT_FALLBACK_OPTIONS.concurrency),
+    enableFallback: options.enableFallback !== false
   };
   const controls = createStopSignal(options.signal);
 
@@ -44,23 +45,18 @@ export function createTwoStageQueue(options = {}) {
         worker: async (row) => {
           try {
             const apiResult = await options.apiDetect(row, controls);
-            if (shouldFallback(apiResult)) {
+            if (queueOptions.enableFallback && shouldFallback(apiResult)) {
               fallbackRows.push({ ...row, apiResult });
               return;
             }
             setResult(resultsByKey, row, normalizeResult(row, apiResult, "api"));
           } catch (error) {
-            fallbackRows.push({
-              ...row,
-              apiResult: {
-                rowNumber: row.rowNumber,
-                status: "待确认",
-                basis: "detail_api",
-                needsFallback: true,
-                errorType: "api_exception",
-                error: sanitizeErrorMessage(error)
-              }
-            });
+            const apiResult = buildApiExceptionResult(row, error);
+            if (queueOptions.enableFallback) {
+              fallbackRows.push({ ...row, apiResult });
+              return;
+            }
+            setResult(resultsByKey, row, normalizeResult(row, apiResult, "api"));
           }
         }
       });
@@ -177,6 +173,20 @@ function buildStoppedResult(row) {
     checkedAt: formatLocalDateTime(),
     basis: "stopped",
     stage: "stopped"
+  };
+}
+
+function buildApiExceptionResult(row, error) {
+  return {
+    rowNumber: row.rowNumber,
+    status: "待确认",
+    finalUrl: row.url || "",
+    remark: sanitizeErrorMessage(error),
+    basis: "detail_api",
+    stage: "api",
+    needsFallback: true,
+    errorType: "api_exception",
+    error: sanitizeErrorMessage(error)
   };
 }
 

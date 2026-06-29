@@ -153,6 +153,58 @@ test("任务结果分页和导出 payload 不泄露 profile API URL 敏感参数
   assert.doesNotMatch(exportText, /secret-a|secret-ms|secret-sign|123456/);
 });
 
+test("enableFallback=false 时任务管理器不会把 API 待确认结果送入 Playwright 兜底", async () => {
+  const fallbackRows = [];
+  const manager = createTaskManager({
+    apiDetector: {
+      async detect(url, { row }) {
+        return {
+          rowNumber: row.rowNumber,
+          originalUrl: url,
+          finalUrl: url,
+          errorType: "request_error",
+          error: "API 请求异常",
+          needsFallback: true
+        };
+      }
+    },
+    fallbackDetector: {
+      async detect(row) {
+        fallbackRows.push(row.rowNumber);
+        return {
+          rowNumber: row.rowNumber,
+          status: "失效",
+          basis: "dom_text",
+          stage: "fallback"
+        };
+      },
+      async close() {}
+    },
+    classifyDetailResult: (evidence) => ({
+      status: "待确认",
+      contentType: "",
+      reason: evidence.error,
+      basis: "detail_api"
+    })
+  });
+
+  const task = await manager.createTask({
+    rows: [{ rowNumber: 2, url: "https://www.douyin.com/video/error" }],
+    options: { enableFallback: false }
+  });
+
+  await manager.startTask(task.id);
+  const snapshot = manager.getTask(task.id);
+  const page = manager.getTaskResults(task.id, { page: 1, pageSize: 1 });
+
+  assert.deepEqual(fallbackRows, []);
+  assert.equal(page.results[0].status, "待确认");
+  assert.equal(page.results[0].stage, "api");
+  assert.equal(page.results[0].basis, "detail_api");
+  assert.equal(snapshot.stats.apiChecked, 1);
+  assert.equal(snapshot.stats.fallbackChecked, 0);
+});
+
 test("createTaskManager 创建任务并维护中文状态、进度和统计", async () => {
   const manager = createTaskManager({
     runQueue: async ({ rows, onResult }) => {

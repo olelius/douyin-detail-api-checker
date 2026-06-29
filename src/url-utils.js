@@ -2,6 +2,11 @@ export function isSupportedDouyinUrl(url) {
   return extractDouyinWorkInfo(url).supported;
 }
 
+export function isDouyinShortUrl(url) {
+  const parsed = parseUrl(String(url || "").trim());
+  return Boolean(parsed && parsed.hostname === "v.douyin.com");
+}
+
 export function extractDouyinWorkInfo(url) {
   const text = String(url || "").trim();
   const parsed = parseUrl(text);
@@ -32,7 +37,12 @@ function parseUrl(text) {
 }
 
 function isDouyinHost(hostname) {
-  return hostname === "douyin.com" || hostname === "www.douyin.com";
+  return [
+    "douyin.com",
+    "www.douyin.com",
+    "iesdouyin.com",
+    "www.iesdouyin.com"
+  ].includes(hostname);
 }
 
 function extractPathInfo(segments) {
@@ -43,9 +53,9 @@ function extractPathInfo(segments) {
     };
   }
 
-  if (segments.length === 3 && segments[0] === "share" && segments[1] === "video" && segments[2]) {
+  if (segments.length === 3 && segments[0] === "share" && ["video", "note", "slides"].includes(segments[1]) && segments[2]) {
     return {
-      pathType: "video",
+      pathType: segments[1] === "video" ? "video" : "note",
       workId: segments[2]
     };
   }

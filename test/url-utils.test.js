@@ -27,6 +27,21 @@ test("extractDouyinWorkInfo 识别 share video 链接", () => {
   );
 });
 
+test("extractDouyinWorkInfo 识别 iesdouyin.com 分享落地链接", () => {
+  assert.deepEqual(extractDouyinWorkInfo("https://iesdouyin.com/share/video/7653287940747508965/?region=CN"), {
+    supported: true,
+    type: "视频",
+    pathType: "video",
+    workId: "7653287940747508965"
+  });
+  assert.deepEqual(extractDouyinWorkInfo("https://www.iesdouyin.com/share/note/7336500551691062538/?u_code=demo"), {
+    supported: true,
+    type: "图文",
+    pathType: "note",
+    workId: "7336500551691062538"
+  });
+});
+
 test("extractDouyinWorkInfo 保留查询参数前的作品 ID", () => {
   assert.equal(
     extractDouyinWorkInfo("https://www.douyin.com/video/7646781280897958638?previous_page=app_code_link").workId,

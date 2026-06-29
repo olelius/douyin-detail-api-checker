@@ -40,6 +40,40 @@ test("createApiDetector 注入 Cookie 和真实 UA 并返回结构化证据", as
   assert.match(calls[0].options.headers["user-agent"], /Chrome/);
 });
 
+test("createApiDetector 先解析 v.douyin.com 302 跳转再请求真实作品 detail API", async () => {
+  const calls = [];
+  const detector = createApiDetector({
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (url === "https://v.douyin.com/AbCdEf/") {
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://www.douyin.com/video/789?previous_page=app_code_link" }
+        });
+      }
+
+      return new Response(JSON.stringify({
+        aweme_detail: {
+          aweme_id: "789",
+          desc: "短链解析成功",
+          video: { play_addr: { url_list: ["https://example.test/v.mp4"] } },
+          statistics: { digg_count: 1 }
+        }
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+  });
+
+  const evidence = await detector.detect("https://v.douyin.com/AbCdEf/");
+
+  assert.equal(calls[0].url, "https://v.douyin.com/AbCdEf/");
+  assert.equal(calls[0].options.redirect, "manual");
+  assert.match(calls[1].url, /aweme_id=789/);
+  assert.equal(evidence.originalUrl, "https://v.douyin.com/AbCdEf/");
+  assert.equal(evidence.finalUrl, "https://www.douyin.com/video/789?previous_page=app_code_link");
+  assert.equal(evidence.detailJson.aweme_detail.aweme_id, "789");
+  assert.equal(evidence.needsFallback, false);
+});
+
 test("createApiDetector 遇到不支持 URL 返回待兜底证据且不访问网络", async () => {
   const detector = createApiDetector({ fetchImpl: async () => assert.fail("不应访问网络") });
   const evidence = await detector.detect("https://example.com/a");
