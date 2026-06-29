@@ -1,0 +1,28 @@
+{
+  "name": "douyin-detail-api-checker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "基于 Node.js 与 Playwright 捕获抖音 detail API 的链接有效性检测工具。",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/start-web.js",
+    "start:cli": "node src/main.js",
+    "check": "node --check src/main.js && node --check src/start-web.js && node --check src/web-server.js && node --check src/detector.js && node --check src/classifier.js && node --check src/excel.js && node --check src/config.js && node --check src/url-utils.js && node --check src/api-detector.js && node --check src/api-profile-cache.js && node --check src/cookie-store.js && node --check src/cookie-refresher.js && node --check src/queue.js && node --check src/task-manager.js && node --check web/app.js && node --check test/classifier.test.js && node --check test/detector.test.js && node --check test/fallback-integration.test.js && node --check test/excel.test.js && node --check test/excel-web-export.test.js && node --check test/config.test.js && node --check test/url-utils.test.js && node --check test/api-detector.test.js && node --check test/api-profile-cache.test.js && node --check test/cookie-store.test.js && node --check test/queue.test.js && node --check test/task-manager.test.js && node --check test/web-server.test.js && node --check test/web-static.test.js",
+    "test": "node --test",
+    "test:unit": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "douyin",
+    "playwright",
+    "detail-api",
+    "excel"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "p-limit": "^6.2.0",
+    "playwright": "^1.45.0"
+  }
+}

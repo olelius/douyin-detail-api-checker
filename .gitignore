@@ -1,0 +1,9 @@
+.local/
+uploads/
+output/*
+!output/.gitkeep
+input/*
+!input/.gitkeep
+node_modules/
+npm-debug.log*
+.DS_Store

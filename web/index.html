@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>抖音链接检测工作台</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>抖音链接检测工作台</h1>
+      <div class="status-strip" aria-label="运行状态">
+        <span id="serviceStatus" class="status-pill">服务：检查中</span>
+        <span id="cookieStatus" class="status-pill">Cookie：检查中</span>
+        <span id="taskStatus" class="status-pill">任务：未创建</span>
+        <button id="refreshCookieButton" class="button button-secondary" type="button">刷新 Cookie</button>
+        <a id="exportLink" class="button button-secondary" href="#" aria-disabled="true">导出 Excel</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="task-panel panel" aria-label="任务面板">
+        <div class="field">
+          <label for="fileInput">选择 Excel</label>
+          <input id="fileInput" type="file" accept=".xlsx">
+        </div>
+
+        <div class="field">
+          <label for="apiSeedUrl">参数种子链接</label>
+          <input id="apiSeedUrl" type="text" value="https://www.douyin.com/video/7607987902190013723">
+        </div>
+
+        <div class="field-grid">
+          <div class="field">
+            <label for="apiConcurrency">API 快筛并发</label>
+            <input id="apiConcurrency" type="number" min="1" max="10" value="5">
+          </div>
+          <div class="field">
+            <label for="fallbackConcurrency">Playwright 兜底并发</label>
+            <input id="fallbackConcurrency" type="number" min="1" max="2" value="2">
+          </div>
+          <div class="field">
+            <label for="timeoutMs">单项超时</label>
+            <input id="timeoutMs" type="number" min="3000" step="1000" value="15000">
+          </div>
+          <div class="field">
+            <label for="delayMs">批次间隔</label>
+            <input id="delayMs" type="number" min="0" step="100" value="1000">
+          </div>
+        </div>
+
+        <label class="inline-option">
+          <input id="enableFallback" type="checkbox" checked>
+          <span>启用 Playwright 兜底</span>
+        </label>
+
+        <div class="actions">
+          <button id="startButton" class="button button-primary" type="button">开始检测</button>
+          <button id="stopButton" class="button button-danger" type="button" disabled>停止任务</button>
+        </div>
+      </section>
+
+      <section class="main-panel" aria-label="检测结果">
+        <section class="panel stats-panel" aria-label="统计区">
+          <div id="statsGrid" class="stats-grid"></div>
+        </section>
+
+        <section class="panel results-panel" aria-label="结果表格">
+          <div class="section-title">
+            <h2>结果预览</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>行号</th>
+                  <th>原始链接</th>
+                  <th>状态</th>
+                  <th>内容类型</th>
+                  <th>最终链接</th>
+                  <th>备注</th>
+                  <th>检测依据</th>
+                </tr>
+              </thead>
+              <tbody id="resultsBody">
+                <tr>
+                  <td colspan="7" class="empty-cell">暂无结果</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <aside class="log-panel panel" aria-label="任务日志">
+        <div class="section-title">
+          <h2>任务日志</h2>
+        </div>
+        <div id="logList" class="log-list" aria-live="polite"></div>
+      </aside>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
